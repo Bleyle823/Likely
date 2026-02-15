@@ -9,7 +9,7 @@ import {
   bytesToHex,
   hexToBase64,
 } from "@chainlink/cre-sdk";
-import {encodeAbiParameters, parseAbiParameters } from "viem";
+import { encodeAbiParameters, parseAbiParameters } from "viem";
 import { GeminiResponseSchema, type Config, type LLMResult } from "./types";
 
 /*********************************
@@ -89,29 +89,32 @@ export function settleMarket(runtime: Runtime<Config>, marketId: bigint, outcome
  * Maps string outcome from Gemini to uint8 for Solidity enum.
  * 
  * @param r - Outcome string from Gemini ("YES", "NO", or "INCONCLUSIVE")
- * @returns Corresponding uint8 value (1=NO, 2=YES, 3=INCONCLUSIVE)
+ * @returns Corresponding uint8 value (0=YES, 1=NO, 2=INCONCLUSIVE)
  */
-const mapOutcomeToUint = (r: LLMResult["result"]): 1 | 2 | 3 => {
-  switch (r) {
+// Map Gemini outcome to contract outcome ID
+// 0 = Yes, 1 = No, 2 = Inconclusive
+// (Matches PredictionMarket.sol logic)
+function mapOutcomeToUint(result: "YES" | "NO" | "INCONCLUSIVE"): number {
+  switch (result) {
+    case "YES":
+      return 0;
     case "NO":
       return 1;
-    case "YES":
-      return 2;
     case "INCONCLUSIVE":
-      return 3;
+      return 2;
   }
 };
 
 /**
- * ABI-encodes the settlement report data for the SimpleMarket contract.
+ * ABI-encodes the settlement report data for the PredictionMarket contract.
  * 
  * @param marketId - ID of the market being settled
- * @param outcomeUint - Numeric outcome (1=NO, 2=YES, 3=INCONCLUSIVE)
+ * @param outcomeUint - Numeric outcome (0=YES, 1=NO, 2=INCONCLUSIVE)
  * @param confidenceBp - Confidence score in basis points (0-10000)
  * @param responseId - Gemini response ID for audit trail
  * @returns ABI-encoded bytes for the report
  */
-const makeReportData = (marketId: bigint, outcomeUint: 1 | 2 | 3, confidenceBp: number, responseId: string) =>
+const makeReportData = (marketId: bigint, outcomeUint: 0 | 1 | 2, confidenceBp: number, responseId: string) =>
   encodeAbiParameters(parseAbiParameters("uint256 marketId, uint8 outcome, uint16 confidenceBp, string responseId"), [
     marketId,
     outcomeUint,

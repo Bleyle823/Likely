@@ -1,0 +1,6 @@
+contracts/.env
+contracts/foundry.toml
+cre-workflow/.env
+frontend/.env.local
+contracts/foundry.toml
+RUN_GUIDE.md
