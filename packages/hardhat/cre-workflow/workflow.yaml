@@ -1,0 +1,7 @@
+sepolia:
+  user-workflow:
+    workflow-name: "prediction-market-settlement"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.json"
+    secrets-path: "./secrets.yaml"
