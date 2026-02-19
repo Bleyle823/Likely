@@ -1,0 +1,22 @@
+{
+    "name": "prediction-market-workflow",
+    "version": "1.0.0",
+    "description": "Chainlink CRE workflow for prediction market settlement",
+    "main": "main.ts",
+    "scripts": {
+        "start": "bun emulate.ts",
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "dependencies": {
+        "@chainlink/cre-sdk": "^1.1.0",
+        "@chainlink/cre-sdk-javy-plugin": "^1.1.0",
+        "@types/js-yaml": "^4.0.9",
+        "js-yaml": "^4.1.1",
+        "viem": "^2.19.8",
+        "zod": "^3.23.8"
+    },
+    "devDependencies": {
+        "@types/node": "^22.5.0",
+        "typescript": "^5.5.4"
+    }
+}

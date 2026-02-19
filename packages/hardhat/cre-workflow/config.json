@@ -1,0 +1,5 @@
+{
+    "geminiModel": "gemini-2.5-flash",
+    "contractAddress": "0x7CFA136d26AE91a663D1d655D3E373D6a049198C",
+    "chainName": "ethereum-testnet-sepolia"
+}
