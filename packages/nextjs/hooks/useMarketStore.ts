@@ -8,6 +8,8 @@ export interface Market {
     noToken: string;
     yesTokenReserve: bigint;
     noTokenReserve: bigint;
+    yesTotalSupply: bigint;
+    noTotalSupply: bigint;
     collateral: bigint;
     lpTradingRevenue: bigint;
     isReported: boolean;
@@ -17,6 +19,7 @@ export interface Market {
     initialProbability: number;
     percentageLocked: number;
     initialTokenValue: bigint;
+    paymentToken: string;
 }
 
 export interface Trade {

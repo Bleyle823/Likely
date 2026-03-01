@@ -1,213 +1,206 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { ArrowsRightLeftIcon } from '@heroicons/react/24/outline';
-import { formatTokenAmount, calculateBuyPrice, calculateSellPrice, calculatePriceImpact } from '../../utils/predictionMarkets';
-import { parseUnits } from 'viem';
+import { useState } from "react";
+import { formatEther, parseEther } from "viem";
+import { useReadContract, useAccount } from "wagmi";
+import { GiveAllowance } from "./GiveAllowance";
+import { useScaffoldReadContract, useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+import { ChevronDownIcon, Cog6ToothIcon, ArrowsUpDownIcon, WalletIcon } from "@heroicons/react/24/outline";
+
+const erc20Abi = [{ inputs: [], name: "totalSupply", outputs: [{ name: "", type: "uint256" }], stateMutability: "view", type: "function" }] as const;
 
 interface TradingInterfaceProps {
     marketAddress: string;
     yesTokenReserve: bigint;
     noTokenReserve: bigint;
-    totalSupply: bigint;
+    yesTotalSupply: bigint;
+    noTotalSupply: bigint;
     initialTokenValue: bigint;
+    paymentTokenAddress: string;
+    yesTokenAddress: string;
+    noTokenAddress: string;
     userYesBalance?: bigint;
     userNoBalance?: bigint;
     onTrade?: (outcome: 'YES' | 'NO', type: 'BUY' | 'SELL', amount: bigint) => Promise<void>;
+    isOwner?: boolean;
 }
 
 export const TradingInterface: React.FC<TradingInterfaceProps> = ({
     marketAddress,
     yesTokenReserve,
     noTokenReserve,
-    totalSupply,
-    initialTokenValue,
+    yesTotalSupply,
+    noTotalSupply,
+    paymentTokenAddress,
+    yesTokenAddress,
+    noTokenAddress,
     userYesBalance = 0n,
     userNoBalance = 0n,
     onTrade,
+    isOwner = false,
 }) => {
-    const [selectedOutcome, setSelectedOutcome] = useState<'YES' | 'NO'>('YES');
-    const [tradeType, setTradeType] = useState<'BUY' | 'SELL'>('BUY');
-    const [amount, setAmount] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
+    const { isConnected } = useAccount();
+    const [mode, setMode] = useState<"buy" | "sell">("buy");
+    const [selectedOutcome, setSelectedOutcome] = useState<0 | 1>(0); // 0 = YES, 1 = NO
+    const [amount, setAmount] = useState("");
+    const tokenAmount = parseEther(amount || "0");
 
-    // Calculate price and impact
-    const amountBigInt = amount ? parseUnits(amount, 18) : 0n;
-    const price = tradeType === 'BUY'
-        ? calculateBuyPrice(selectedOutcome, amountBigInt, yesTokenReserve, noTokenReserve, totalSupply, initialTokenValue)
-        : calculateSellPrice(selectedOutcome, amountBigInt, yesTokenReserve, noTokenReserve, totalSupply, initialTokenValue);
+    const { data: totalSupply } = useReadContract({
+        abi: erc20Abi,
+        address: yesTokenAddress as `0x${string}`, // Total supply is same for both YES/NO tokens in this architecture
+        functionName: "totalSupply",
+    });
 
-    const priceImpact = calculatePriceImpact(selectedOutcome, amountBigInt, yesTokenReserve, noTokenReserve, totalSupply);
+    const { data: totalPriceInUSDC } = useScaffoldReadContract({
+        contractName: "PredictionMarket",
+        functionName: mode === "buy" ? "getBuyPriceInUSDC" : "getSellPriceInUSDC",
+        args: [BigInt(selectedOutcome), tokenAmount],
+        watch: true,
+    });
 
-    // Calculate current probability
-    const yesSold = totalSupply - yesTokenReserve;
-    const noSold = totalSupply - noTokenReserve;
-    const totalSold = yesSold + noSold;
-    const yesProbability = totalSold > 0n ? (Number(yesSold) / Number(totalSold)) * 100 : 50;
-    const noProbability = 100 - yesProbability;
+    if (isOwner) return <div className="text-center p-4 text-base-content/70 font-bold italic">Liquidity providers cannot trade.</div>;
 
-    const currentProbability = selectedOutcome === 'YES' ? yesProbability : noProbability;
+    const totalSold = totalSupply ? (totalSupply - yesTokenReserve) + (totalSupply - noTokenReserve) : 1n;
+    const yesSold = totalSupply ? totalSupply - yesTokenReserve : 0n;
+    const yesProb = totalSold > 0n ? Number((yesSold * BigInt(1e18)) / totalSold) / 1e18 : 0.5;
+    const noProb = 1 - yesProb;
+    const yesCents = Math.round(yesProb * 100);
+    const noCents = Math.round(noProb * 100);
 
-    const handleTrade = async () => {
-        if (!amount || !onTrade || amountBigInt === 0n) return;
-
-        setIsLoading(true);
-        try {
-            await onTrade(selectedOutcome, tradeType, amountBigInt);
-            setAmount('');
-        } catch (error) {
-            console.error('Trade failed:', error);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const maxBalance = tradeType === 'SELL'
-        ? (selectedOutcome === 'YES' ? userYesBalance : userNoBalance)
-        : 0n;
+    const currentTokenAddress = mode === 'buy'
+        ? paymentTokenAddress
+        : (selectedOutcome === 0 ? yesTokenAddress : noTokenAddress);
 
     return (
-        <div className="card bg-base-200 shadow-xl">
-            <div className="card-body">
-                <h3 className="card-title text-xl mb-4">Trade</h3>
-
-                {/* Buy/Sell Toggle */}
-                <div className="tabs tabs-boxed mb-4">
-                    <a
-                        className={`tab tab-lg flex-1 ${tradeType === 'BUY' ? 'tab-active' : ''}`}
-                        onClick={() => setTradeType('BUY')}
-                    >
-                        Buy
-                    </a>
-                    <a
-                        className={`tab tab-lg flex-1 ${tradeType === 'SELL' ? 'tab-active' : ''}`}
-                        onClick={() => setTradeType('SELL')}
-                    >
-                        Sell
-                    </a>
-                </div>
-
-                {/* Outcome Selection */}
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                    <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        className={`btn ${selectedOutcome === 'YES' ? 'btn-success' : 'btn-outline btn-success'} h-auto py-4`}
-                        onClick={() => setSelectedOutcome('YES')}
-                    >
-                        <div className="text-left w-full">
-                            <div className="text-xs opacity-70 mb-1">YES</div>
-                            <div className="text-2xl font-bold">{yesProbability.toFixed(1)}%</div>
-                        </div>
-                    </motion.button>
-                    <motion.button
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        className={`btn ${selectedOutcome === 'NO' ? 'btn-error' : 'btn-outline btn-error'} h-auto py-4`}
-                        onClick={() => setSelectedOutcome('NO')}
-                    >
-                        <div className="text-left w-full">
-                            <div className="text-xs opacity-70 mb-1">NO</div>
-                            <div className="text-2xl font-bold">{noProbability.toFixed(1)}%</div>
-                        </div>
-                    </motion.button>
-                </div>
-
-                {/* Amount Input */}
-                <div className="form-control mb-4">
-                    <label className="label">
-                        <span className="label-text">Amount</span>
-                        {tradeType === 'SELL' && (
-                            <span className="label-text-alt">
-                                Balance: {formatTokenAmount(maxBalance, 18, 4)}
-                            </span>
-                        )}
-                    </label>
-                    <div className="input-group">
-                        <input
-                            type="number"
-                            placeholder="0.00"
-                            className="input input-bordered w-full"
-                            value={amount}
-                            onChange={(e) => setAmount(e.target.value)}
-                            min="0"
-                            step="0.01"
-                        />
-                        <span className="bg-base-300 px-4 flex items-center">
-                            {selectedOutcome}
-                        </span>
+        <div className="card bg-white shadow-sm border border-base-200 rounded-[1.5rem] overflow-hidden w-full">
+            <div className="card-body p-5">
+                {/* Action Tabs & Settings Row */}
+                <div className="flex justify-between items-center mb-4">
+                    <div className="flex gap-4">
+                        <button
+                            className={`pb-1 px-1 font-black text-base transition-all border-b-[3px] ${mode === "buy" ? "text-blue-600 border-blue-600" : "text-base-content/20 border-transparent hover:text-black/40"}`}
+                            onClick={() => setMode("buy")}
+                        >
+                            Buy
+                        </button>
+                        <button
+                            className={`pb-1 px-1 font-black text-base transition-all border-b-[3px] ${mode === "sell" ? "text-blue-600 border-blue-600" : "text-base-content/20 border-transparent hover:text-black/40"}`}
+                            onClick={() => setMode("sell")}
+                        >
+                            Sell
+                        </button>
                     </div>
-                    {tradeType === 'SELL' && maxBalance > 0n && (
-                        <label className="label">
-                            <span className="label-text-alt"></span>
+                    <div className="flex items-center gap-2">
+                        <button className="flex items-center gap-1 font-black text-blue-600 text-[11px] cursor-pointer hover:opacity-80">
+                            Market <ChevronDownIcon className="w-3 h-3 stroke-[3]" />
+                        </button>
+                        <button className="w-7 h-7 rounded-lg bg-base-100 border border-base-200 flex items-center justify-center shadow-sm hover:bg-base-200 transition-colors">
+                            <Cog6ToothIcon className="w-3.5 h-3.5 text-base-content/60" />
+                        </button>
+                    </div>
+                </div>
+
+                <div className="divider -mx-5 my-0 opacity-50 mb-4"></div>
+
+                {/* Outcome Toggle Buttons */}
+                <div className="bg-base-100 rounded-[1rem] p-1 flex gap-1 mb-4 border border-base-200 shadow-inner">
+                    <button
+                        className={`flex-1 py-2.5 px-3 rounded-[0.8rem] font-black text-sm transition-all flex items-center justify-center gap-2 ${selectedOutcome === 0 ? "bg-blue-600 text-white shadow-md scale-[1.01]" : "text-base-content/40 hover:text-black"}`}
+                        onClick={() => setSelectedOutcome(0)}
+                    >
+                        YES {yesCents}¢
+                    </button>
+                    <button
+                        className={`flex-1 py-2.5 px-3 rounded-[0.8rem] font-black text-sm transition-all flex items-center justify-center gap-2 ${selectedOutcome === 1 ? "bg-[#d1255d] text-white shadow-md scale-[1.01]" : "text-base-content/40 hover:text-black"}`}
+                        onClick={() => setSelectedOutcome(1)}
+                    >
+                        NO {noCents}¢
+                    </button>
+                </div>
+
+                {/* Input Section */}
+                <div className="bg-base-100 rounded-[1.5rem] p-4 border border-base-200 shadow-inner relative group mb-4">
+                    <div className="flex justify-between items-start mb-3">
+                        <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-lg font-black text-blue-900/80 tracking-tight">Amount</span>
+                                <ArrowsUpDownIcon className="w-3.5 h-3.5 text-blue-900/40 group-hover:text-blue-600 transition-colors cursor-pointer" />
+                            </div>
+                            <div className="flex items-center gap-1 text-blue-900/40 font-black text-[10px]">
+                                <WalletIcon className="w-3 h-3" />
+                                <span>Balance: {formatEther(mode === 'sell' ? (selectedOutcome === 0 ? userYesBalance : userNoBalance) : 0n)}</span>
+                            </div>
+                        </div>
+                        <div className="flex flex-col items-end flex-1">
+                            <div className="flex items-center justify-end w-full">
+                                <span className={`text-2xl font-black transition-colors ${amount ? "text-blue-900/80" : "text-blue-900/40"}`}>$</span>
+                                <input
+                                    type="text"
+                                    placeholder="0.0"
+                                    className="bg-transparent text-right text-2xl font-black text-blue-900/80 w-full focus:outline-none placeholder:text-blue-900/40"
+                                    value={amount}
+                                    onChange={e => {
+                                        const val = e.target.value.replace(/[^0-9.]/g, '');
+                                        if (!isNaN(Number(val)) || val === "") setAmount(val);
+                                    }}
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end gap-1">
+                        {[1, 10, 100, "MAX"].map((n) => (
                             <button
-                                className="label-text-alt link link-primary"
-                                onClick={() => setAmount(formatTokenAmount(maxBalance, 18, 18))}
+                                key={n}
+                                className="px-2.5 py-1 rounded-lg border border-blue-600/30 text-[9px] font-black text-blue-600 hover:bg-blue-600 hover:text-white transition-all active:scale-95"
+                                onClick={() => {
+                                    if (n === "MAX") {
+                                        setAmount(formatEther(mode === 'sell' ? (selectedOutcome === 0 ? userYesBalance : userNoBalance) : 1000n * parseEther("1")));
+                                    } else {
+                                        setAmount(String(Number(amount || 0) + (n as number)));
+                                    }
+                                }}
                             >
-                                Max
+                                {typeof n === 'number' ? `+$${n}` : n}
                             </button>
-                        </label>
-                    )}
+                        ))}
+                    </div>
                 </div>
 
-                {/* Price Display */}
-                {amount && amountBigInt > 0n && (
-                    <motion.div
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="bg-base-300 rounded-lg p-4 mb-4 space-y-2"
-                    >
-                        <div className="flex justify-between items-center">
-                            <span className="text-sm text-base-content/60">
-                                {tradeType === 'BUY' ? 'You pay' : 'You receive'}
-                            </span>
-                            <span className="text-lg font-bold text-base-content">
-                                ${formatTokenAmount(price, 18, 4)}
-                            </span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-sm text-base-content/60">Average price</span>
-                            <span className="text-sm font-medium text-base-content">
-                                ${formatTokenAmount(price / amountBigInt, 0, 4)} per token
-                            </span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-sm text-base-content/60">Price impact</span>
-                            <span className={`text-sm font-medium ${priceImpact > 5 ? 'text-warning' : 'text-base-content'}`}>
-                                {priceImpact.toFixed(2)}%
-                            </span>
-                        </div>
-                    </motion.div>
-                )}
-
-                {/* Price Impact Warning */}
-                {priceImpact > 5 && amount && (
-                    <div className="alert alert-warning mb-4">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                        <span className="text-sm">High price impact! Consider reducing your trade size.</span>
+                {totalPriceInUSDC && tokenAmount > 0n && (
+                    <div className="flex justify-between items-center px-2 mb-4">
+                        <span className="text-xs font-black text-base-content/40 uppercase tracking-wider">{mode === "buy" ? "Estimated Cost" : "Estimated Return"}</span>
+                        <span className="text-sm font-black text-black">{Number(formatEther(totalPriceInUSDC as bigint)).toFixed(4)} USDC</span>
                     </div>
                 )}
 
-                {/* Trade Button */}
-                <button
-                    className={`btn btn-lg w-full ${selectedOutcome === 'YES' ? 'btn-success' : 'btn-error'
-                        } ${isLoading ? 'loading' : ''}`}
-                    onClick={handleTrade}
-                    disabled={!amount || amountBigInt === 0n || isLoading}
-                >
-                    {isLoading ? 'Processing...' : `${tradeType} ${selectedOutcome}`}
-                </button>
-
-                {/* Info */}
-                <div className="text-xs text-base-content/60 text-center mt-2">
-                    {tradeType === 'BUY'
-                        ? 'You will receive outcome tokens that can be redeemed for $1 each if you win'
-                        : 'You will receive payment tokens based on current market probability'
-                    }
+                {/* Approval Check */}
+                <div className="mb-4">
+                    <GiveAllowance
+                        tokenAddress={currentTokenAddress}
+                        spenderAddress={marketAddress}
+                        amount={amount}
+                        showInput={false}
+                        disabled={!tokenAmount || tokenAmount === 0n}
+                    />
                 </div>
+
+                {/* Main Action Button */}
+                <button
+                    className={`w-full py-4 rounded-[1.2rem] font-black text-base shadow-lg active:scale-95 transition-all
+            ${(!totalPriceInUSDC || tokenAmount === 0n)
+                            ? "bg-base-200 text-base-content/30 cursor-not-allowed"
+                            : "bg-[#ff5722] text-white hover:bg-[#f4511e] shadow-[#ff5722]/20"}`}
+                    disabled={!totalPriceInUSDC || tokenAmount === 0n}
+                    onClick={async () => {
+                        if (onTrade) {
+                            await onTrade(selectedOutcome === 0 ? 'YES' : 'NO', mode.toUpperCase() as 'BUY' | 'SELL', tokenAmount);
+                            setAmount("");
+                        }
+                    }}
+                >
+                    {isConnected ? `${mode === "buy" ? "Buy" : "Sell"} ${selectedOutcome === 0 ? 'YES' : 'NO'}` : "Connect Wallet"}
+                </button>
             </div>
         </div>
     );

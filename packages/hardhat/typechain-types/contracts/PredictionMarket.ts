@@ -41,6 +41,7 @@ export declare namespace PredictionMarket {
     predictionMarketOwner: AddressLike;
     initialProbability: BigNumberish;
     percentageLocked: BigNumberish;
+    paymentToken: AddressLike;
   };
 
   export type PredictionDetailsStructOutput = [
@@ -59,7 +60,8 @@ export declare namespace PredictionMarket {
     lpTradingRevenue: bigint,
     predictionMarketOwner: string,
     initialProbability: bigint,
-    percentageLocked: bigint
+    percentageLocked: bigint,
+    paymentToken: string
   ] & {
     question: string;
     outcome1: string;
@@ -77,6 +79,7 @@ export declare namespace PredictionMarket {
     predictionMarketOwner: string;
     initialProbability: bigint;
     percentageLocked: bigint;
+    paymentToken: string;
   };
 }
 

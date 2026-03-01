@@ -37,12 +37,11 @@ export function formatUSD(value: number, decimals: number = 2): string {
 export function calculateProbability(
     yesReserve: bigint,
     noReserve: bigint,
-    totalSupply: bigint
+    yesTotalSupply: bigint,
+    noTotalSupply: bigint
 ): number {
-    if (totalSupply === 0n) return 50;
-
-    const yesSold = totalSupply - yesReserve;
-    const noSold = totalSupply - noReserve;
+    const yesSold = yesTotalSupply - yesReserve;
+    const noSold = noTotalSupply - noReserve;
     const totalSold = yesSold + noSold;
 
     if (totalSold === 0n) return 50;
@@ -59,13 +58,14 @@ export function calculateBuyPrice(
     amount: bigint,
     yesReserve: bigint,
     noReserve: bigint,
-    totalSupply: bigint,
+    yesTotalSupply: bigint,
+    noTotalSupply: bigint,
     initialTokenValue: bigint
 ): bigint {
     const tokensSold = outcome === 'YES'
-        ? totalSupply - yesReserve
-        : totalSupply - noReserve;
-    const totalSold = (totalSupply - yesReserve) + (totalSupply - noReserve);
+        ? yesTotalSupply - yesReserve
+        : noTotalSupply - noReserve;
+    const totalSold = (yesTotalSupply - yesReserve) + (noTotalSupply - noReserve);
 
     // Probability before trade
     const probBefore = totalSold === 0n
@@ -92,18 +92,19 @@ export function calculateSellPrice(
     amount: bigint,
     yesReserve: bigint,
     noReserve: bigint,
-    totalSupply: bigint,
+    yesTotalSupply: bigint,
+    noTotalSupply: bigint,
     initialTokenValue: bigint
 ): bigint {
     const tokensSold = outcome === 'YES'
-        ? totalSupply - yesReserve
-        : totalSupply - noReserve;
-    const totalSold = (totalSupply - yesReserve) + (totalSupply - noReserve);
+        ? yesTotalSupply - yesReserve
+        : noTotalSupply - noReserve;
+    const totalSold = (yesTotalSupply - yesReserve) + (noTotalSupply - noReserve);
 
     if (tokensSold < amount) return 0n;
 
     // Probability before trade
-    const probBefore = (tokensSold * 100n) / totalSold;
+    const probBefore = totalSold === 0n ? 50n : (tokensSold * 100n) / totalSold;
 
     // Probability after trade
     const tokensAfter = tokensSold - amount;
@@ -125,12 +126,13 @@ export function calculatePriceImpact(
     amount: bigint,
     yesReserve: bigint,
     noReserve: bigint,
-    totalSupply: bigint
+    yesTotalSupply: bigint,
+    noTotalSupply: bigint
 ): number {
     const tokensSold = outcome === 'YES'
-        ? totalSupply - yesReserve
-        : totalSupply - noReserve;
-    const totalSold = (totalSupply - yesReserve) + (totalSupply - noReserve);
+        ? yesTotalSupply - yesReserve
+        : noTotalSupply - noReserve;
+    const totalSold = (yesTotalSupply - yesReserve) + (noTotalSupply - noReserve);
 
     if (totalSold === 0n) return 0;
 
@@ -165,22 +167,39 @@ export function timeAgo(timestamp: number): string {
 /**
  * Generate mock historical data for charts
  */
+/**
+ * Generate mock historical data for charts (Stable/Deterministic)
+ */
 export function generateMockHistoricalData(
     currentProbability: number,
+    seed: string = "default",
     days: number = 7
 ): Array<{ timestamp: number; yes: number; no: number }> {
     const data: Array<{ timestamp: number; yes: number; no: number }> = [];
-    const now = Date.now();
-    const interval = (days * 24 * 60 * 60 * 1000) / 50; // 50 data points
 
-    let prob = 50; // Start at 50%
+    // Use the seed to create a deterministic "random" sequence
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) {
+        hash = ((hash << 5) - hash) + seed.charCodeAt(i);
+        hash |= 0;
+    }
+
+    const seededRandom = () => {
+        hash = (hash * 1664525 + 1013904223) | 0;
+        return (hash >>> 0) / 0xFFFFFFFF;
+    };
+
+    // Use a fixed "now" for historical points so it doesn't change every millisecond
+    const now = Math.floor(Date.now() / (60 * 60 * 1000)) * (60 * 60 * 1000);
+    const interval = (days * 24 * 60 * 60 * 1000) / 50;
+
+    let prob = 50;
 
     for (let i = 0; i < 50; i++) {
         const timestamp = now - (50 - i) * interval;
 
-        // Random walk towards current probability
         const drift = (currentProbability - prob) * 0.1;
-        const randomChange = (Math.random() - 0.5) * 5;
+        const randomChange = (seededRandom() - 0.5) * 5;
         prob = Math.max(1, Math.min(99, prob + drift + randomChange));
 
         data.push({
@@ -194,19 +213,32 @@ export function generateMockHistoricalData(
 }
 
 /**
- * Generate mock volume data
+ * Generate mock volume data (Stable/Deterministic)
  */
 export function generateMockVolumeData(
+    seed: string = "default",
     days: number = 7
 ): Array<{ timestamp: number; buy: number; sell: number }> {
     const data: Array<{ timestamp: number; buy: number; sell: number }> = [];
-    const now = Date.now();
-    const interval = (days * 24 * 60 * 60 * 1000) / 20; // 20 data points
+
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) {
+        hash = ((hash << 5) - hash) + seed.charCodeAt(i) + 42; // Different hash loop for volume
+        hash |= 0;
+    }
+
+    const seededRandom = () => {
+        hash = (hash * 1664525 + 1013904223) | 0;
+        return (hash >>> 0) / 0xFFFFFFFF;
+    };
+
+    const now = Math.floor(Date.now() / (60 * 60 * 1000)) * (60 * 60 * 1000);
+    const interval = (days * 24 * 60 * 60 * 1000) / 20;
 
     for (let i = 0; i < 20; i++) {
         const timestamp = now - (20 - i) * interval;
-        const buy = Math.random() * 1000;
-        const sell = Math.random() * 800;
+        const buy = seededRandom() * 1000;
+        const sell = seededRandom() * 800;
 
         data.push({ timestamp, buy, sell });
     }

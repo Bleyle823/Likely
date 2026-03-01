@@ -39,7 +39,9 @@ const deployPredictionMarket: DeployFunction = async function (hre: HardhatRunti
     const initialYesProbability = 50;
     const percentageToLock = 10;
     const paymentToken = mockERC20.address;
-    const forwarderAddress = deployer;
+    const forwarderAddress = hre.network.name === "avalancheFuji"
+      ? "0x51e2a2a093ee60f78b4310e9e66de8d889608b3e"
+      : deployer;
 
     // Adjust liquidity based on network
     // For local testing: 1000 tokens
@@ -125,17 +127,16 @@ const deployPredictionMarket: DeployFunction = async function (hre: HardhatRunti
       console.log("Please update manually");
     }
 
-    // Step 9: Generate deployedContracts.ts for frontend (Localhost only)
-    if (hre.network.name === "localhost" || hre.network.name === "hardhat") {
-      console.log("Generating deployedContracts.ts for frontend...");
-      try {
-        const { execSync } = require("child_process");
-        execSync("yarn hardhat run scripts/generateDeployedContracts.ts", { cwd: __dirname + "/..", stdio: "inherit" });
-      } catch (error) {
-        console.log("Could not generate deployedContracts.ts");
-      }
-    } else {
-      console.log("Skipping manual contract generation (handled by hardhat-deploy for testnets)");
+    // Step 9: Generate deployedContracts.ts for frontend
+    console.log("Generating deployedContracts.ts for frontend...");
+    try {
+      const { execSync } = require("child_process");
+      // Use npx ts-node directly to avoid package manager issues or recursive yarn calls
+      execSync("npx ts-node scripts/generateDeployedContracts.ts", { cwd: path.join(__dirname, ".."), stdio: "inherit" });
+      console.log("✅ Successfully updated deployedContracts.ts");
+    } catch (error) {
+      console.log("Could not generate deployedContracts.ts");
+      console.error(error);
     }
   } catch (error) {
     console.error("Deployment Failed!");

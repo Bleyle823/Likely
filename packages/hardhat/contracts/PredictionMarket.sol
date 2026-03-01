@@ -1,10 +1,12 @@
 //SPDX-License-Identifier: MIT
 pragma solidity >=0.8.0 <0.9.0;
 
-import { PredictionMarketToken } from "./PredictionMarketToken.sol";
-import { ReceiverTemplate } from "./interfaces/ReceiverTemplate.sol";
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {PredictionMarketToken} from "./PredictionMarketToken.sol";
+import {ReceiverTemplate} from "./interfaces/ReceiverTemplate.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {
+    SafeERC20
+} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 contract PredictionMarket is ReceiverTemplate {
     using SafeERC20 for IERC20;
@@ -21,9 +23,18 @@ contract PredictionMarket is ReceiverTemplate {
     error PredictionMarket__InsufficientWinningTokens();
     error PredictionMarket__AmountMustBeGreaterThanZero();
     error PredictionMarket__PaymentTransferFailed();
-    error PredictionMarket__InsufficientTokenReserve(Outcome _outcome, uint256 _amountToken);
-    error PredictionMarket__InsufficientBalance(uint256 _tradingAmount, uint256 _userBalance);
-    error PredictionMarket__InsufficientAllowance(uint256 _tradingAmount, uint256 _allowance);
+    error PredictionMarket__InsufficientTokenReserve(
+        Outcome _outcome,
+        uint256 _amountToken
+    );
+    error PredictionMarket__InsufficientBalance(
+        uint256 _tradingAmount,
+        uint256 _userBalance
+    );
+    error PredictionMarket__InsufficientAllowance(
+        uint256 _tradingAmount,
+        uint256 _allowance
+    );
     error PredictionMarket__InsufficientLiquidity();
     error PredictionMarket__InvalidPercentageToLock();
 
@@ -53,6 +64,7 @@ contract PredictionMarket is ReceiverTemplate {
         address predictionMarketOwner;
         uint256 initialProbability;
         uint256 percentageLocked;
+        address paymentToken;
     }
 
     uint256 private constant PRECISION = 1e18;
@@ -84,13 +96,39 @@ contract PredictionMarket is ReceiverTemplate {
     /// Events //////
     /////////////////////////
 
-    event TokensPurchased(address indexed buyer, Outcome outcome, uint256 amount, uint256 paymentAmount);
-    event TokensSold(address indexed seller, Outcome outcome, uint256 amount, uint256 paymentAmount);
-    event WinningTokensRedeemed(address indexed redeemer, uint256 amount, uint256 payoutAmount);
-    event MarketReported(address indexed oracle, Outcome winningOutcome, address winningToken);
+    event TokensPurchased(
+        address indexed buyer,
+        Outcome outcome,
+        uint256 amount,
+        uint256 paymentAmount
+    );
+    event TokensSold(
+        address indexed seller,
+        Outcome outcome,
+        uint256 amount,
+        uint256 paymentAmount
+    );
+    event WinningTokensRedeemed(
+        address indexed redeemer,
+        uint256 amount,
+        uint256 payoutAmount
+    );
+    event MarketReported(
+        address indexed oracle,
+        Outcome winningOutcome,
+        address winningToken
+    );
     event MarketResolved(address indexed resolver, uint256 payoutAmount);
-    event LiquidityAdded(address indexed provider, uint256 amount, uint256 tokensAmount);
-    event LiquidityRemoved(address indexed provider, uint256 amount, uint256 tokensAmount);
+    event LiquidityAdded(
+        address indexed provider,
+        uint256 amount,
+        uint256 tokensAmount
+    );
+    event LiquidityRemoved(
+        address indexed provider,
+        uint256 amount,
+        uint256 tokensAmount
+    );
 
     /// CRE Settlement Event ///
     event SettlementRequested(uint256 indexed marketId, string question);
@@ -109,7 +147,8 @@ contract PredictionMarket is ReceiverTemplate {
 
     /// Checkpoint 6: Only oracle can report (for manual fallback) ///
     modifier onlyOracle() {
-        if (msg.sender != i_oracle) revert PredictionMarket__OnlyOracleCanReport();
+        if (msg.sender != i_oracle)
+            revert PredictionMarket__OnlyOracleCanReport();
         _;
     }
 
@@ -121,7 +160,8 @@ contract PredictionMarket is ReceiverTemplate {
 
     /// Amount must be greater than zero ///
     modifier greaterThanZero(uint256 _amount) {
-        if (_amount == 0) revert PredictionMarket__AmountMustBeGreaterThanZero();
+        if (_amount == 0)
+            revert PredictionMarket__AmountMustBeGreaterThanZero();
         _;
     }
 
@@ -141,9 +181,12 @@ contract PredictionMarket is ReceiverTemplate {
         uint256 _initialLiquidityAmount
     ) ReceiverTemplate(_forwarderAddress) {
         //// Checkpoint 2: Validate inputs and set immutable variables ////
-        if (_initialLiquidityAmount == 0) revert PredictionMarket__AmountMustBeGreaterThanZero();
-        if (_initialYesProbability > 100) revert PredictionMarket__InvalidProbability();
-        if (_percentageToLock > 100) revert PredictionMarket__InvalidPercentageToLock();
+        if (_initialLiquidityAmount == 0)
+            revert PredictionMarket__AmountMustBeGreaterThanZero();
+        if (_initialYesProbability > 100)
+            revert PredictionMarket__InvalidProbability();
+        if (_percentageToLock > 100)
+            revert PredictionMarket__InvalidPercentageToLock();
 
         i_oracle = _oracle;
         i_initialTokenValue = _initialTokenValue;
@@ -156,17 +199,36 @@ contract PredictionMarket is ReceiverTemplate {
         s_collateral = _initialLiquidityAmount;
 
         // Calculate initial token amount based on liquidity and token value
-        uint256 initialTokenAmount = (_initialLiquidityAmount * PRECISION) / i_initialTokenValue;
+        uint256 initialTokenAmount = (_initialLiquidityAmount * PRECISION) /
+            i_initialTokenValue;
 
         //// Checkpoint 3: Deploy tokens and implement probability locking ////
 
         // Calculate locked tokens to simulate initial probability
-        uint256 lockedYes = (initialTokenAmount * _initialYesProbability * _percentageToLock * 2) / 10000;
-        uint256 lockedNo = (initialTokenAmount * (100 - _initialYesProbability) * _percentageToLock * 2) / 10000;
+        uint256 lockedYes = (initialTokenAmount *
+            _initialYesProbability *
+            _percentageToLock *
+            2) / 10000;
+        uint256 lockedNo = (initialTokenAmount *
+            (100 - _initialYesProbability) *
+            _percentageToLock *
+            2) / 10000;
 
         // Create tokens with split minting (avoiding transfer calls)
-        i_yesToken = new PredictionMarketToken("Yes", "Y", _liquidityProvider, initialTokenAmount, lockedYes);
-        i_noToken = new PredictionMarketToken("No", "N", _liquidityProvider, initialTokenAmount, lockedNo);
+        i_yesToken = new PredictionMarketToken(
+            "Yes",
+            "Y",
+            _liquidityProvider,
+            initialTokenAmount,
+            lockedYes
+        );
+        i_noToken = new PredictionMarketToken(
+            "No",
+            "N",
+            _liquidityProvider,
+            initialTokenAmount,
+            lockedNo
+        );
 
         // Set owner
         _transferOwnership(_liquidityProvider);
@@ -183,7 +245,11 @@ contract PredictionMarket is ReceiverTemplate {
         s_collateral = 0; // Will be set in initialize()
         s_pendingInitialLiquidity = _initialLiquidityAmount;
 
-        emit LiquidityAdded(_liquidityProvider, _initialLiquidityAmount, initialTokenAmount);
+        emit LiquidityAdded(
+            _liquidityProvider,
+            _initialLiquidityAmount,
+            initialTokenAmount
+        );
     }
 
     /// @notice Initialize the market by transferring initial liquidity
@@ -208,9 +274,12 @@ contract PredictionMarket is ReceiverTemplate {
      * @notice Add liquidity to the prediction market and mint tokens
      * @dev Only the owner can add liquidity and only if the prediction is not reported
      */
-    function addLiquidity(uint256 _amount) external onlyOwner predictionNotReported {
+    function addLiquidity(
+        uint256 _amount
+    ) external onlyOwner predictionNotReported {
         //// Checkpoint 4 ////
-        if (_amount == 0) revert PredictionMarket__AmountMustBeGreaterThanZero();
+        if (_amount == 0)
+            revert PredictionMarket__AmountMustBeGreaterThanZero();
 
         uint256 tokensToMint = (_amount * PRECISION) / i_initialTokenValue;
         s_collateral += _amount;
@@ -230,18 +299,28 @@ contract PredictionMarket is ReceiverTemplate {
      * @dev Only the owner can remove liquidity and only if the prediction is not reported
      * @param _amountToWithdraw Amount of payment tokens to withdraw from liquidity pool
      */
-    function removeLiquidity(uint256 _amountToWithdraw) external onlyOwner predictionNotReported {
+    function removeLiquidity(
+        uint256 _amountToWithdraw
+    ) external onlyOwner predictionNotReported {
         //// Checkpoint 4 ////
-        if (_amountToWithdraw > s_collateral) revert PredictionMarket__InsufficientLiquidity();
+        if (_amountToWithdraw > s_collateral)
+            revert PredictionMarket__InsufficientLiquidity();
 
-        uint256 tokensToBurn = (_amountToWithdraw * PRECISION) / i_initialTokenValue;
+        uint256 tokensToBurn = (_amountToWithdraw * PRECISION) /
+            i_initialTokenValue;
 
         // Ensure contract has enough tokens to burn
         if (i_yesToken.balanceOf(address(this)) < tokensToBurn) {
-            revert PredictionMarket__InsufficientTokenReserve(Outcome.YES, tokensToBurn);
+            revert PredictionMarket__InsufficientTokenReserve(
+                Outcome.YES,
+                tokensToBurn
+            );
         }
         if (i_noToken.balanceOf(address(this)) < tokensToBurn) {
-            revert PredictionMarket__InsufficientTokenReserve(Outcome.NO, tokensToBurn);
+            revert PredictionMarket__InsufficientTokenReserve(
+                Outcome.NO,
+                tokensToBurn
+            );
         }
 
         s_collateral -= _amountToWithdraw;
@@ -268,10 +347,12 @@ contract PredictionMarket is ReceiverTemplate {
         // Decode the report from CRE workflow
         // Format: (marketId, outcome, confidenceBps, evidenceURI)
         // Note: marketId is not used in single-market contract, but kept for compatibility
-        (uint256 marketId, uint8 outcomeUint, uint16 confidenceBps, string memory evidenceURI) = abi.decode(
-            report,
-            (uint256, uint8, uint16, string)
-        );
+        (
+            uint256 marketId,
+            uint8 outcomeUint,
+            uint16 confidenceBps,
+            string memory evidenceURI
+        ) = abi.decode(report, (uint256, uint8, uint16, string));
 
         if (s_isReported) revert PredictionMarket__PredictionAlreadyReported();
 
@@ -292,17 +373,29 @@ contract PredictionMarket is ReceiverTemplate {
         s_confidenceBps = confidenceBps;
         s_evidenceURI = evidenceURI;
 
-        emit MarketReported(address(0), winningOutcome, address(s_winningToken));
+        emit MarketReported(
+            address(0),
+            winningOutcome,
+            address(s_winningToken)
+        );
     }
 
     /// @notice Manual fallback for inconclusive AI results
     /// @dev Only oracle can call this if CRE returns INCONCLUSIVE
-    function reportManually(Outcome _winningOutcome) external onlyOracle predictionNotReported {
+    function reportManually(
+        Outcome _winningOutcome
+    ) external onlyOracle predictionNotReported {
         //// Checkpoint 5: Manual Oracle Fallback ////
         s_isReported = true;
-        s_winningToken = _winningOutcome == Outcome.YES ? i_yesToken : i_noToken;
+        s_winningToken = _winningOutcome == Outcome.YES
+            ? i_yesToken
+            : i_noToken;
 
-        emit MarketReported(msg.sender, _winningOutcome, address(s_winningToken));
+        emit MarketReported(
+            msg.sender,
+            _winningOutcome,
+            address(s_winningToken)
+        );
     }
 
     /**
@@ -310,7 +403,11 @@ contract PredictionMarket is ReceiverTemplate {
      * @dev Only callable by the owner and only if the prediction is resolved
      * @return payoutAmount The amount of payment tokens redeemed
      */
-    function resolveMarketAndWithdraw() external onlyOwner returns (uint256 payoutAmount) {
+    function resolveMarketAndWithdraw()
+        external
+        onlyOwner
+        returns (uint256 payoutAmount)
+    {
         /// Checkpoint 6 ////
         if (!s_isReported) revert PredictionMarket__PredictionNotReported();
 
@@ -348,28 +445,45 @@ contract PredictionMarket is ReceiverTemplate {
         /// Checkpoint 8 ////
 
         // Calculate how many tokens user will receive for this payment
-        uint256 tokensToReceive = calculateTokensForPayment(_outcome, _paymentAmount);
+        uint256 tokensToReceive = calculateTokensForPayment(
+            _outcome,
+            _paymentAmount
+        );
 
         // Slippage protection
         require(tokensToReceive >= _minTokensOut, "Insufficient output amount");
 
-        PredictionMarketToken token = _outcome == Outcome.YES ? i_yesToken : i_noToken;
+        PredictionMarketToken token = _outcome == Outcome.YES
+            ? i_yesToken
+            : i_noToken;
 
         // Check contract has enough tokens
         if (token.balanceOf(address(this)) < tokensToReceive) {
-            revert PredictionMarket__InsufficientTokenReserve(_outcome, tokensToReceive);
+            revert PredictionMarket__InsufficientTokenReserve(
+                _outcome,
+                tokensToReceive
+            );
         }
 
         // Update trading revenue (LP earns from trades)
         s_lpTradingRevenue += _paymentAmount;
 
         // Transfer payment tokens from buyer
-        i_paymentToken.safeTransferFrom(msg.sender, address(this), _paymentAmount);
+        i_paymentToken.safeTransferFrom(
+            msg.sender,
+            address(this),
+            _paymentAmount
+        );
 
         // Transfer tokens to buyer
         token.transfer(msg.sender, tokensToReceive);
 
-        emit TokensPurchased(msg.sender, _outcome, tokensToReceive, _paymentAmount);
+        emit TokensPurchased(
+            msg.sender,
+            _outcome,
+            tokensToReceive,
+            _paymentAmount
+        );
     }
 
     /**
@@ -379,11 +493,16 @@ contract PredictionMarket is ReceiverTemplate {
      * @param _paymentAmount Amount of payment tokens to spend
      * @return Number of tokens user will receive
      */
-    function calculateTokensForPayment(Outcome _outcome, uint256 _paymentAmount) public view returns (uint256) {
+    function calculateTokensForPayment(
+        Outcome _outcome,
+        uint256 _paymentAmount
+    ) public view returns (uint256) {
         if (_paymentAmount == 0) return 0;
 
         (uint256 tokensSold, uint256 totalSold) = _getCurrentReserves(_outcome);
-        PredictionMarketToken token = _outcome == Outcome.YES ? i_yesToken : i_noToken;
+        PredictionMarketToken token = _outcome == Outcome.YES
+            ? i_yesToken
+            : i_noToken;
 
         // If no tokens sold yet, use initial probability
         if (totalSold == 0) {
@@ -391,7 +510,9 @@ contract PredictionMarket is ReceiverTemplate {
                 ? (uint256(i_initialYesProbability) * PRECISION) / 100
                 : ((100 - uint256(i_initialYesProbability)) * PRECISION) / 100;
 
-            return (_paymentAmount * PRECISION) / ((i_initialTokenValue * initialProb) / PRECISION);
+            return
+                (_paymentAmount * PRECISION) /
+                ((i_initialTokenValue * initialProb) / PRECISION);
         }
 
         // Use binary search to find token amount that costs approximately _paymentAmount
@@ -400,8 +521,8 @@ contract PredictionMarket is ReceiverTemplate {
         uint256 mid;
         uint256 cost;
 
-        // Binary search with 10 iterations (sufficient precision)
-        for (uint256 i = 0; i < 10; i++) {
+        // Binary search with 64 iterations (sufficient precision for 1e18)
+        for (uint256 i = 0; i < 64; i++) {
             mid = (low + high) / 2;
             if (mid == 0) break;
 
@@ -431,18 +552,26 @@ contract PredictionMarket is ReceiverTemplate {
         uint256 _minRefund
     ) external predictionNotReported notOwner greaterThanZero(_tradingAmount) {
         /// Checkpoint 8 ////
-        PredictionMarketToken token = _outcome == Outcome.YES ? i_yesToken : i_noToken;
+        PredictionMarketToken token = _outcome == Outcome.YES
+            ? i_yesToken
+            : i_noToken;
 
         // Check user has enough tokens
         uint256 userBalance = token.balanceOf(msg.sender);
         if (userBalance < _tradingAmount) {
-            revert PredictionMarket__InsufficientBalance(_tradingAmount, userBalance);
+            revert PredictionMarket__InsufficientBalance(
+                _tradingAmount,
+                userBalance
+            );
         }
 
         // Check user has approved contract
         uint256 allowance = token.allowance(msg.sender, address(this));
         if (allowance < _tradingAmount) {
-            revert PredictionMarket__InsufficientAllowance(_tradingAmount, allowance);
+            revert PredictionMarket__InsufficientAllowance(
+                _tradingAmount,
+                allowance
+            );
         }
 
         // Calculate payment to return
@@ -477,7 +606,9 @@ contract PredictionMarket is ReceiverTemplate {
      * @dev Only if the prediction is resolved
      * @param _amount The amount of winning tokens to redeem
      */
-    function redeemWinningTokens(uint256 _amount) external greaterThanZero(_amount) notOwner {
+    function redeemWinningTokens(
+        uint256 _amount
+    ) external greaterThanZero(_amount) notOwner {
         //// Checkpoint 9 ////
         if (!s_isReported) revert PredictionMarket__PredictionNotReported();
 
@@ -513,7 +644,10 @@ contract PredictionMarket is ReceiverTemplate {
      * @param _tradingAmount The amount of tokens to buy
      * @return The total price
      */
-    function getBuyPrice(Outcome _outcome, uint256 _tradingAmount) public view returns (uint256) {
+    function getBuyPrice(
+        Outcome _outcome,
+        uint256 _tradingAmount
+    ) public view returns (uint256) {
         //// Checkpoint 7 ////
         return _calculatePrice(_outcome, _tradingAmount, false);
     }
@@ -524,7 +658,10 @@ contract PredictionMarket is ReceiverTemplate {
      * @param _tradingAmount The amount of tokens to sell
      * @return The total price
      */
-    function getSellPrice(Outcome _outcome, uint256 _tradingAmount) public view returns (uint256) {
+    function getSellPrice(
+        Outcome _outcome,
+        uint256 _tradingAmount
+    ) public view returns (uint256) {
         //// Checkpoint 7 ////
         return _calculatePrice(_outcome, _tradingAmount, true);
     }
@@ -539,7 +676,11 @@ contract PredictionMarket is ReceiverTemplate {
      * @param _tradingAmount The amount of tokens
      * @param _isSelling Whether this is a sell calculation
      */
-    function _calculatePrice(Outcome _outcome, uint256 _tradingAmount, bool _isSelling) private view returns (uint256) {
+    function _calculatePrice(
+        Outcome _outcome,
+        uint256 _tradingAmount,
+        bool _isSelling
+    ) private view returns (uint256) {
         /// Checkpoint 7 ////
         (uint256 tokensSold, uint256 totalSold) = _getCurrentReserves(_outcome);
 
@@ -547,15 +688,21 @@ contract PredictionMarket is ReceiverTemplate {
         uint256 probBefore = _calculateProbability(tokensSold, totalSold);
 
         // Calculate probability after trade
-        uint256 tokensAfter = _isSelling ? tokensSold - _tradingAmount : tokensSold + _tradingAmount;
-        uint256 totalAfter = _isSelling ? totalSold - _tradingAmount : totalSold + _tradingAmount;
+        uint256 tokensAfter = _isSelling
+            ? tokensSold - _tradingAmount
+            : tokensSold + _tradingAmount;
+        uint256 totalAfter = _isSelling
+            ? totalSold - _tradingAmount
+            : totalSold + _tradingAmount;
         uint256 probAfter = _calculateProbability(tokensAfter, totalAfter);
 
         // Average probability
         uint256 avgProb = (probBefore + probAfter) / 2;
 
         // Price = initialTokenValue * avgProbability * tradingAmount
-        return (i_initialTokenValue * avgProb * _tradingAmount) / PRECISION;
+        return
+            (i_initialTokenValue * avgProb * _tradingAmount) /
+            (PRECISION * PRECISION);
     }
 
     /**
@@ -563,7 +710,9 @@ contract PredictionMarket is ReceiverTemplate {
      * @param _outcome The possible outcome (YES or NO)
      * @return The current reserves of the tokens
      */
-    function _getCurrentReserves(Outcome _outcome) private view returns (uint256, uint256) {
+    function _getCurrentReserves(
+        Outcome _outcome
+    ) private view returns (uint256, uint256) {
         /// Checkpoint 7 ////
         // Get total supply of both tokens
         uint256 yesTotalSupply = i_yesToken.totalSupply();
@@ -587,7 +736,10 @@ contract PredictionMarket is ReceiverTemplate {
      * @param totalSold The total number of tokens sold
      * @return The probability of the tokens
      */
-    function _calculateProbability(uint256 tokensSold, uint256 totalSold) private pure returns (uint256) {
+    function _calculateProbability(
+        uint256 tokensSold,
+        uint256 totalSold
+    ) private pure returns (uint256) {
         /// Checkpoint 7 ////
         if (totalSold == 0) {
             return PRECISION / 2; // 50% probability if no tokens sold
@@ -603,7 +755,11 @@ contract PredictionMarket is ReceiverTemplate {
     /**
      * @notice Get the prediction details
      */
-    function getPrediction() external view returns (PredictionDetails memory details) {
+    function getPrediction()
+        external
+        view
+        returns (PredictionDetails memory details)
+    {
         details.oracle = i_oracle;
         details.initialTokenValue = i_initialTokenValue;
         details.percentageLocked = i_percentageLocked;
@@ -620,18 +776,23 @@ contract PredictionMarket is ReceiverTemplate {
         details.noTokenReserve = i_noToken.balanceOf(address(this));
         details.isReported = s_isReported;
         details.winningToken = address(s_winningToken);
+        details.paymentToken = address(i_paymentToken);
     }
 
     /// @notice Get the owner of the contract (inherited from Ownable)
 
     /// @notice Request CRE to settle the market
     /// @dev Emits SettlementRequested event that CRE workflow listens for
-    function requestSettlement(uint256 _marketId) external predictionNotReported {
+    function requestSettlement(
+        uint256 _marketId
+    ) external predictionNotReported {
         emit SettlementRequested(_marketId, s_question);
     }
 
     /// @notice Support ERC165 interface detection
-    function supportsInterface(bytes4 interfaceId) public pure override returns (bool) {
+    function supportsInterface(
+        bytes4 interfaceId
+    ) public pure override returns (bool) {
         return super.supportsInterface(interfaceId);
     }
 

@@ -11,9 +11,8 @@ interface MarketStatsProps {
 
 export const MarketStats: React.FC<MarketStatsProps> = ({ market }) => {
     // Calculate stats
-    const totalSupply = market.yesTokenReserve + market.noTokenReserve;
-    const yesSold = totalSupply - market.yesTokenReserve;
-    const noSold = totalSupply - market.noTokenReserve;
+    const yesSold = market.yesTotalSupply - market.yesTokenReserve;
+    const noSold = market.noTotalSupply - market.noTokenReserve;
     const totalSold = yesSold + noSold;
 
     const yesProbability = totalSold > 0n
